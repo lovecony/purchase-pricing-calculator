@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Purchase Pricing &amp; Profit Calculator</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f4f7f8; color: #172c35; font: 16px/1.5 "Inter", system-ui, sans-serif; }
+  main { max-width: 1120px; margin: auto; padding: 32px 18px; }
+  h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); line-height: 1.15; margin: 0 0 12px; }
+  h2 { margin: 0 0 12px; font-size: 1.25rem; }
+  p { margin: 0 0 12px; }
+  .hint { color: #405961; font-size: .93rem; }
+  fieldset, section, details { min-width: 0; margin: 16px 0; padding: 16px; border: 1px solid #bacbd0; border-radius: 8px; background: white; }
+  legend, summary { font-weight: 700; }
+  summary { cursor: pointer; }
+  details ol { margin-bottom: 0; padding-left: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; }
+  .spaced { margin-top: 12px; }
+  [hidden] { display: none !important; }
+  label { display: grid; align-content: start; gap: 4px; font-size: .94rem; font-weight: 600; }
+  input, select { width: 100%; padding: 8px; border: 1px solid #77929a; border-radius: 5px; color: inherit; background: white; font: inherit; }
+  input:focus-visible, select:focus-visible, summary:focus-visible, .scroll:focus-visible { outline: 2px solid #056c66; outline-offset: 2px; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 10px 8px; border-bottom: 1px solid #d5e0e3; text-align: right; }
+  th:first-child, td[colspan] { text-align: left; }
+  thead { background: #eaf4f2; }
+  #message, .invalid { color: #98341a; }
+  #message:empty { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Purchase Pricing &amp; Profit Calculator</h1>
+  <p>Compare five supplier offers by landed cost, target profit, and suggested selling price.</p>
+  <form id="calculator">
+    <fieldset>
+      <legend>Purchase price</legend>
+      <label>List price <input name="price" type="number" min="0" step="any" value="100" required></label>
+      <div class="grid spaced">
+        <label>A · Percent off <input name="a" type="number" min="0" max="100" step="any" value="0" required></label>
+        <label>B · Percent off <input name="b" type="number" min="0" max="100" step="any" value="10" required></label>
+        <label>C · Percent off <input name="c" type="number" min="0" max="100" step="any" value="20" required></label>
+        <label>D · Amount off <input name="d" type="number" min="0" step="any" value="15" required></label>
+        <label>E · Amount added <input name="e" type="number" min="0" step="any" value="5" required></label>
+      </div>
+      <p class="hint spaced">Each offer adjusts the same list price independently, before tax.</p>
+    </fieldset>
+    <fieldset>
+      <legend>Tax and exchange rate</legend>
+      <div class="grid">
+        <label>Purchase tax (%) <input name="tax" type="number" min="0" max="100" step="any" value="5" required></label>
+        <label>Exchange rate <input name="rate" type="number" min="0" step="any" value="1" required></label>
+      </div>
+      <p class="hint spaced">Enter the number of selling-side units per one purchase-side unit. Use 1 when no conversion is needed.</p>
+    </fieldset>
+    <fieldset>
+      <legend>Shipping and other costs</legend>
+      <p class="hint">Use the same units as the list price. If a charge is quoted in selling-side units, divide it by the exchange rate before entering it here. Use costs for the same item or batch as the list price.</p>
+      <label>Shipping method
+        <select name="shippingMode">
+          <option value="unit">Weight or volume × rate</option>
+          <option value="flat">Flat shipping total</option>
+        </select>
+      </label>
+      <div class="grid spaced" id="unitShipping">
+        <label>Weight or volume <input name="quantity" type="number" min="0" step="any" value="2" required></label>
+        <label>Shipping rate per unit <input name="shippingRate" type="number" min="0" step="any" value="5" required></label>
+      </div>
+      <div class="spaced" id="flatShipping" hidden>
+        <label>Shipping total <input name="shippingTotal" type="number" min="0" step="any" value="10" required disabled></label>
+      </div>
+      <label class="spaced">Other costs (optional)
+        <input name="other" type="number" min="0" step="any" value="0" aria-describedby="otherHint">
+      </label>
+      <p class="hint spaced" id="otherHint">Add packing, customs clearance, duties, or handling for this item or batch.</p>
+    </fieldset>
+    <fieldset>
+      <legend>Net revenue targets</legend>
+      <div class="grid">
+        <label>Net revenue 1 (% of landed cost) <input name="markup" type="number" min="0" step="any" value="20" required></label>
+        <label>Net revenue 2 (fixed amount) <input name="fee" type="number" min="0" step="any" value="0" required></label>
+      </div>
+      <p class="hint spaced">These two inputs set your target profit above landed cost. Enter the fixed amount in selling-side units and use zero for either component you do not need.</p>
+    </fieldset>
+  </form>
+
+  <section aria-labelledby="comparison">
+    <h2 id="comparison">Scenario comparison</h2>
+    <p class="hint" id="resultUnits">Adjusted price, tax, shipping, and other costs are shown in purchase-side units. Landed cost, target profit, and suggested price are shown in selling-side units.</p>
+    <p id="message" role="status"></p>
+    <div class="scroll" role="region" aria-label="Scenario results" tabindex="0">
+      <table aria-describedby="resultUnits">
+        <thead><tr>
+          <th scope="col">Offer</th><th scope="col">Adjusted price</th><th scope="col">Purchase tax</th>
+          <th scope="col">Shipping</th><th scope="col">Other costs</th><th scope="col">Landed cost</th>
+          <th scope="col">Target profit</th><th scope="col">Suggested price</th>
+        </tr></thead>
+        <tbody id="results"></tbody>
+      </table>
+    </div>
+  </section>
+  <details>
+    <summary>How prices are calculated</summary>
+    <ol>
+      <li>Apply one supplier offer to the list price.</li>
+      <li>Multiply the adjusted purchase price by the purchase tax rate.</li>
+      <li>Add adjusted price, purchase tax, shipping, and other costs. Multiply the subtotal by the exchange rate to get landed cost.</li>
+      <li>Multiply landed cost by Net revenue 1 and add Net revenue 2 to get target profit.</li>
+      <li>Add landed cost and target profit to get the suggested selling price.</li>
+    </ol>
+  </details>
+</main>
+<script>
+  const form = document.getElementById('calculator');
+  const fields = form.elements;
+  const results = document.getElementById('results');
+  const message = document.getElementById('message');
+  const unitShipping = document.getElementById('unitShipping');
+  const flatShipping = document.getElementById('flatShipping');
+  const amounts = new Intl.NumberFormat('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const adjustments = new Intl.NumberFormat('en', { maximumSignificantDigits: 15 });
+
+  function value(name) {
+    return fields.namedItem(name).valueAsNumber;
+  }
+
+  function update() {
+    const byUnit = fields.namedItem('shippingMode').value === 'unit';
+    unitShipping.hidden = !byUnit;
+    flatShipping.hidden = byUnit;
+    fields.namedItem('quantity').disabled = !byUnit;
+    fields.namedItem('shippingRate').disabled = !byUnit;
+    fields.namedItem('shippingTotal').disabled = byUnit;
+
+    results.replaceChildren();
+    message.textContent = '';
+    const commonInputs = [...form.querySelectorAll('input:not([disabled])')]
+      .filter(input => !['a', 'b', 'c', 'd', 'e'].includes(input.name));
+    const exchangeRate = value('rate');
+    if (commonInputs.some(input => !input.validity.valid) || exchangeRate <= 0) {
+      message.textContent = 'Check the shared inputs. The exchange rate must be greater than zero.';
+      return;
+    }
+
+    const listPrice = value('price');
+    const taxRate = value('tax') / 100;
+    const shipping = byUnit ? value('quantity') * value('shippingRate') : value('shippingTotal');
+    const other = fields.namedItem('other').value === '' ? 0 : value('other');
+    const markup = value('markup') / 100;
+    const fixedProfit = value('fee');
+    const offers = [
+      ...['a', 'b', 'c'].map(name => [name, '% off', listPrice * (1 - value(name) / 100)]),
+      ['d', ' off', listPrice - value('d')],
+      ['e', ' added', listPrice + value('e')]
+    ];
+    for (const [name, suffix, adjustedPrice] of offers) {
+      const row = results.insertRow();
+      const heading = document.createElement('th');
+      heading.scope = 'row';
+      heading.textContent = name.toUpperCase();
+      row.append(heading);
+
+      const tax = adjustedPrice * taxRate;
+      const rawLanded = (adjustedPrice + tax + shipping + other) * exchangeRate;
+      const rawProfit = rawLanded * markup + fixedProfit;
+      const values = [adjustedPrice, tax, shipping, other, rawLanded, rawProfit];
+      const invalid = !fields.namedItem(name).validity.valid || adjustedPrice < 0;
+      if (invalid || values.some(amount => !Number.isFinite(amount))) {
+        const cell = row.insertCell();
+        cell.colSpan = 7;
+        cell.className = 'invalid';
+        cell.textContent = adjustedPrice < 0
+          ? 'The amount off cannot exceed the list price.'
+          : 'Enter a valid adjustment within the supported range.';
+        continue;
+      }
+      heading.textContent += ' · ' + adjustments.format(value(name)) + suffix;
+      // Round the displayed cost and profit before adding them to the final quote.
+      const landed = Number(rawLanded.toFixed(2));
+      const profit = Number(rawProfit.toFixed(2));
+      for (const amount of [adjustedPrice, tax, shipping, other, landed, profit, landed + profit]) {
+        row.insertCell().textContent = amounts.format(amount);
+      }
+    }
+  }
+  form.addEventListener('input', update);
+  form.addEventListener('change', update);
+  form.addEventListener('submit', event => event.preventDefault());
+  update();
+</script>
+</body>
+</html>
